@@ -437,6 +437,7 @@ async function exportDocxAsPDF() {
   const isRTL = dirToggle.checked;
 
   const wrap = document.createElement('div');
+  if (isRTL) wrap.dir = 'rtl';
   wrap.style.cssText = `
     width:794px; padding:68px 76px; background:#fff; color:#111;
     font-family:${isRTL ? "'Noto Sans Hebrew','Arial Hebrew',Arial,sans-serif" : "Georgia,'Times New Roman',serif"};
@@ -454,6 +455,31 @@ async function exportDocxAsPDF() {
     el.style.cssText += 'background:#fff;color:#111;padding:0;margin:0;box-shadow:none;min-height:auto;';
     if (isRTL) el.style.fontFamily = "'Noto Sans Hebrew','Arial Hebrew',Arial,sans-serif";
   });
+
+  // html2canvas can't flip list markers for RTL — replace them with inline text
+  if (isRTL) {
+    clone.querySelectorAll('ul > li').forEach(el => {
+      el.style.listStyle = 'none';
+      el.style.direction = 'rtl';
+      el.style.textAlign = 'right';
+      const marker = document.createTextNode('\u2022 ');
+      el.insertBefore(marker, el.firstChild);
+    });
+    clone.querySelectorAll('ol').forEach(ol => {
+      let counter = 0;
+      ol.querySelectorAll(':scope > li').forEach(el => {
+        counter++;
+        el.style.listStyle = 'none';
+        el.style.direction = 'rtl';
+        el.style.textAlign = 'right';
+        const marker = document.createTextNode(counter + '. ');
+        el.insertBefore(marker, el.firstChild);
+      });
+    });
+    clone.querySelectorAll('ul, ol').forEach(el => {
+      el.style.cssText += 'padding-right:1.5em;padding-left:0;margin-right:0.5em;margin-left:0;direction:rtl;';
+    });
+  }
 
   wrap.appendChild(clone);
   document.body.appendChild(wrap);
