@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CV Anonymizer</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- pdf.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- mammoth.js (DOCX → HTML) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <!-- jsPDF (canvas → PDF for PDF files) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- html2pdf (export for DOCX files) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+<body>
+
+<!-- ─── Header ─────────────────────────────────────────────────────── -->
+<header class="header">
+  <div class="header-left">
+    <span class="logo">🛡️</span>
+    <h1>CV Anonymizer</h1>
+  </div>
+  <div class="header-right" id="header-controls" style="display:none">
+    <div class="toggle-container">
+      <span class="toggle-label">LTR</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="dir-toggle" />
+        <span class="toggle-slider"></span>
+      </label>
+      <span class="toggle-label">RTL</span>
+    </div>
+    <button id="btn-new-file" class="btn btn-ghost">← New File</button>
+    <button id="btn-export" class="btn btn-primary">⬇ Export PDF</button>
+  </div>
+</header>
+
+<!-- ─── Upload Section ─────────────────────────────────────────────── -->
+<section id="upload-section" class="upload-section">
+  <div id="drop-zone" class="drop-zone">
+    <div class="drop-icon">📄</div>
+    <h2>Upload your CV</h2>
+    <p>Drag &amp; drop a <strong>PDF</strong> or <strong>DOCX</strong> file here</p>
+    <button class="btn btn-primary btn-lg" id="browse-btn">Choose File</button>
+    <input type="file" id="file-input" accept=".pdf,.docx,.doc" />
+    <p class="upload-note">Everything runs in your browser — no data leaves your device.</p>
+  </div>
+</section>
+
+<!-- ─── Editor Section ─────────────────────────────────────────────── -->
+<section id="editor-section" class="editor-section hidden">
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-group">
+      <button id="tb-blacken" class="btn btn-blacken" title="Blacken selected text">
+        <span class="btn-icon">■</span> Blacken
+      </button>
+      <button id="tb-remove" class="btn btn-remove" title="Remove selected text completely">
+        <span class="btn-icon">✕</span> Remove
+      </button>
+    </div>
+    <div class="toolbar-divider"></div>
+    <div class="toolbar-group">
+      <button id="tb-undo" class="btn btn-ghost" title="Undo last redaction" disabled>↩ Undo</button>
+      <button id="tb-clear" class="btn btn-ghost" title="Clear all redactions" disabled>🗑 Clear all</button>
+    </div>
+    <div class="toolbar-hint">
+      Select text in the document, then click <strong>Blacken</strong> or <strong>Remove</strong>
+    </div>
+  </div>
+
+  <!-- Editor body -->
+  <div class="editor-body">
+
+    <!-- Document Viewer -->
+    <div class="viewer-wrap">
+      <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <span>Processing document…</span>
+      </div>
+      <div class="viewer-container">
+        <div id="document-viewer" spellcheck="false"></div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        Redactions
+        <span class="badge" id="redaction-count">0</span>
+      </div>
+      <div class="sidebar-body" id="redaction-list">
+        <p class="sidebar-empty">Select text in the document to start redacting.</p>
+      </div>
+    </aside>
+
+  </div>
+</section>
+
+<!-- ─── Floating Selection Toolbar ────────────────────────────────── -->
+<div id="selection-toolbar" class="selection-toolbar" style="display:none">
+  <button class="sel-btn sel-blacken" data-action="blacken">■ Blacken</button>
+  <button class="sel-btn sel-remove"  data-action="remove">✕ Remove</button>
+  <div class="sel-arrow"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
