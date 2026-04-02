@@ -5,7 +5,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 let currentMode      = null;
 let redactionHistory = [];
-let pdfPageCanvases  = [];
+let pdfPageBitmaps   = [];
 
 const uploadSection  = document.getElementById('upload-section');
 const editorSection  = document.getElementById('editor-section');
@@ -84,7 +84,8 @@ async function runLoader(fn) {
 
 async function processPDF(file) {
   currentMode = 'pdf';
-  pdfPageCanvases = [];
+  pdfPageBitmaps.forEach(b => b.close());
+  pdfPageBitmaps = [];
   docViewer.innerHTML = '';
 
   const ab  = await file.arrayBuffer();
@@ -94,7 +95,8 @@ async function processPDF(file) {
     const page = await pdf.getPage(n);
     const { wrap, canvas } = await buildPDFPage(page, n);
     docViewer.appendChild(wrap);
-    pdfPageCanvases.push(canvas);
+    const bitmap = await createImageBitmap(canvas);
+    pdfPageBitmaps.push(bitmap);
     if (n < pdf.numPages) {
       const hr = document.createElement('hr');
       hr.className = 'pdf-page-sep';
@@ -180,7 +182,8 @@ function buildTextLayer(container, textContent, viewport) {
 
 async function processDOCX(file) {
   currentMode = 'docx';
-  pdfPageCanvases = [];
+  pdfPageBitmaps.forEach(b => b.close());
+  pdfPageBitmaps = [];
 
   const ab = await file.arrayBuffer();
   const result = await mammoth.convertToHtml({ arrayBuffer: ab }, {
@@ -395,18 +398,18 @@ async function exportPDFFromCanvas() {
   let doc = null;
 
   for (let i = 0; i < pageWraps.length; i++) {
-    const wrap      = pageWraps[i];
-    const srcCanvas = pdfPageCanvases[i];
-    if (!srcCanvas) continue;
+    const wrap   = pageWraps[i];
+    const bitmap = pdfPageBitmaps[i];
+    if (!bitmap) continue;
 
     const exp = document.createElement('canvas');
-    exp.width  = srcCanvas.width;
-    exp.height = srcCanvas.height;
+    exp.width  = bitmap.width;
+    exp.height = bitmap.height;
     const ctx  = exp.getContext('2d');
-    ctx.drawImage(srcCanvas, 0, 0);
+    ctx.drawImage(bitmap, 0, 0);
 
-    const scaleX = srcCanvas.width  / wrap.offsetWidth;
-    const scaleY = srcCanvas.height / wrap.offsetHeight;
+    const scaleX = bitmap.width  / wrap.offsetWidth;
+    const scaleY = bitmap.height / wrap.offsetHeight;
 
     redactionHistory
       .filter(r => r.mode === 'pdf' && r.pageWrap === wrap)
@@ -435,28 +438,66 @@ async function exportDocxAsPDF() {
 
   const wrap = document.createElement('div');
   wrap.style.cssText = `
-    width:210mm; padding:18mm 20mm; background:#fff; color:#111;
+    width:794px; padding:68px 76px; background:#fff; color:#111;
     font-family:${isRTL ? "'Noto Sans Hebrew','Arial Hebrew',Arial,sans-serif" : "Georgia,'Times New Roman',serif"};
     font-size:10.5pt; line-height:1.65; direction:${isRTL ? 'rtl' : 'ltr'};
-    position:fixed; top:-99999px; left:-99999px;
+    position:fixed; left:0; top:0;
   `;
 
   const clone = docViewer.cloneNode(true);
+  clone.removeAttribute('id');
   clone.querySelectorAll('.redacted-remove').forEach(el => { el.style.cssText += 'display:none!important;'; });
   clone.querySelectorAll('.redacted-blacken').forEach(el => { el.style.cssText += 'background:#000!important;color:#000!important;'; });
+
+  // Copy docx-content styles inline so they survive reparenting
+  clone.querySelectorAll('.docx-content').forEach(el => {
+    el.style.cssText += 'background:#fff;color:#111;padding:0;margin:0;box-shadow:none;min-height:auto;';
+    if (isRTL) el.style.fontFamily = "'Noto Sans Hebrew','Arial Hebrew',Arial,sans-serif";
+  });
 
   wrap.appendChild(clone);
   document.body.appendChild(wrap);
 
   try {
-    await html2pdf().set({
-      margin: 0,
-      filename: 'anonymized-cv.pdf',
-      image: { type: 'jpeg', quality: 0.97 },
-      html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] },
-    }).from(wrap).save();
+    const canvas = await html2canvas(wrap, {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+    });
+
+    const { jsPDF } = window.jspdf;
+    const imgData = canvas.toDataURL('image/jpeg', 0.97);
+    const pxW = canvas.width;
+    const pxH = canvas.height;
+
+    // A4 width = 210mm; split content into pages if taller than A4
+    const pageW = 210;
+    const pageH = 297;
+    const contentH_mm = (pxH / pxW) * pageW;
+    const totalPages = Math.max(1, Math.ceil(contentH_mm / pageH));
+
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    if (totalPages === 1) {
+      doc.addImage(imgData, 'JPEG', 0, 0, pageW, contentH_mm);
+    } else {
+      // Slice the canvas into A4-sized pages
+      const sliceH = Math.floor(pxH / totalPages);
+      for (let p = 0; p < totalPages; p++) {
+        if (p > 0) doc.addPage('a4', 'portrait');
+        const sliceCanvas = document.createElement('canvas');
+        sliceCanvas.width = pxW;
+        sliceCanvas.height = Math.min(sliceH, pxH - p * sliceH);
+        const sCtx = sliceCanvas.getContext('2d');
+        sCtx.drawImage(canvas, 0, p * sliceH, pxW, sliceCanvas.height, 0, 0, pxW, sliceCanvas.height);
+        const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.97);
+        const sliceH_mm = (sliceCanvas.height / pxW) * pageW;
+        doc.addImage(sliceData, 'JPEG', 0, 0, pageW, sliceH_mm);
+      }
+    }
+
+    doc.save('anonymized-cv.pdf');
   } finally {
     wrap.remove();
   }
@@ -481,7 +522,8 @@ function resetApp() {
   docViewer.innerHTML = '';
   fileInput.value     = '';
   redactionHistory    = [];
-  pdfPageCanvases     = [];
+  pdfPageBitmaps.forEach(b => b.close());
+  pdfPageBitmaps      = [];
   currentMode         = null;
   refreshSidebar();
   refreshToolbarState();
